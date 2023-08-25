@@ -9,10 +9,20 @@ fn main() {
         eprintln!("Problem reading configuration file: {err}");
         process::exit(1);
     });
-    cf_ddns::run(config).unwrap_or_else(|err| {
+    let results = cf_ddns::run(config).unwrap_or_else(|err| {
         eprintln!("Problem updating records: {err}");
         process::exit(1);
-    })
+    });
+    for result in results {
+        match result {
+            Ok(res) => {
+                for rec in res {
+                    println!("{} successfully updated", rec.name)
+                }
+            }
+            Err(err) => println!("{}", err),
+        };
+    }
 }
 
 fn get_config(config_path: &str) -> Result<Config, Box<dyn std::error::Error>> {
