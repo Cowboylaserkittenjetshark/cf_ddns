@@ -1,40 +1,32 @@
-use std::process;
-
-use cf_ddns::Config;
 use clap::Parser;
+use ddns_client::{run, Config};
+use std::{fs, process};
 
 fn main() {
     let args = Args::parse();
-    let config = get_config(&args.config).unwrap_or_else(|err| {
-        eprintln!("Problem reading configuration file: {err}");
-        process::exit(1);
-    });
-    let results = cf_ddns::run(config).unwrap_or_else(|err| {
-        eprintln!("Problem updating records: {err}");
-        process::exit(1);
-    });
-    for result in results {
-        match result {
-            Ok(res) => {
-                for rec in res {
-                    println!("{} successfully updated", rec.name)
-                }
-            }
-            Err(err) => println!("{}", err),
-        };
-    }
-}
+    let cfg = match fs::read_to_string(args.config) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error accessing config file: {e}");
+            process::exit(1);
+        }
+    };
+    let cfg: Config = match toml::from_str(&cfg) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("Error parsing config file: {e}");
+            process::exit(1);
+        }
+    };
 
-fn get_config(config_path: &str) -> Result<Config, Box<dyn std::error::Error>> {
-    let contents = std::fs::read_to_string(config_path)?;
-    let config: Config = toml::from_str(&contents)?;
-    Ok(config)
+    let result = run(cfg);
+    println!("Result: {}", result.unwrap_err());
 }
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Path to the configuration file
-    #[arg(short, long)]
+    ///The configuration file to use
+    #[arg(short, long, value_name = "FILE")]
     config: String,
 }
