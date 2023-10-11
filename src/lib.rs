@@ -53,7 +53,8 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
                 dns::DnsContent::A { content } => {
                     if let Some(addr) = v4_addr {
                         if content == addr {
-                            let error = RecordUpdateResult::Err(RecordUpdateError::UpToDate(rec));
+                            let error =
+                                RecordUpdateResult::Skipped(RecordUpdateError::UpToDate(rec));
                             results.push(error);
                         } else {
                             let new_content = dns::DnsContent::A { content: addr };
@@ -68,17 +69,18 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
                                 },
                             };
                             let response = api_client.request(&endpoint)?;
-                            results.push(RecordUpdateResult::Ok(response.result));
+                            results.push(RecordUpdateResult::Updated(response.result));
                         }
                     } else {
-                        let error = RecordUpdateResult::Err(RecordUpdateError::NoNewAddr(rec));
+                        let error = RecordUpdateResult::Skipped(RecordUpdateError::NoNewAddr(rec));
                         results.push(error)
                     }
                 }
                 dns::DnsContent::AAAA { content } => {
                     if let Some(addr) = v6_addr {
                         if content == addr {
-                            let error = RecordUpdateResult::Err(RecordUpdateError::UpToDate(rec));
+                            let error =
+                                RecordUpdateResult::Skipped(RecordUpdateError::UpToDate(rec));
                             results.push(error);
                         } else {
                             let new_content = dns::DnsContent::AAAA { content: addr };
@@ -93,15 +95,16 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
                                 },
                             };
                             let response = api_client.request(&endpoint)?;
-                            results.push(RecordUpdateResult::Ok(response.result));
+                            results.push(RecordUpdateResult::Updated(response.result));
                         }
                     } else {
-                        let error = RecordUpdateResult::Err(RecordUpdateError::NoNewAddr(rec));
+                        let error = RecordUpdateResult::Skipped(RecordUpdateError::NoNewAddr(rec));
                         results.push(error)
                     }
                 }
                 _ => {
-                    let error = RecordUpdateResult::Err(RecordUpdateError::IncompatibleType(rec));
+                    let error =
+                        RecordUpdateResult::Skipped(RecordUpdateError::IncompatibleType(rec));
                     results.push(error);
                 }
             }
@@ -112,8 +115,8 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
 
 #[derive(Debug, Tabled)]
 pub enum RecordUpdateResult {
-    Ok(dns::DnsRecord),
-    Err(RecordUpdateError),
+    Updated(dns::DnsRecord),
+    Skipped(RecordUpdateError),
 }
 
 #[derive(Error, Debug)]
@@ -124,7 +127,7 @@ pub enum RecordUpdateError {
     Locked(dns::DnsRecord),
     #[error("Did not fetch an ip address appropriate for record type, skipped")]
     NoNewAddr(dns::DnsRecord),
-    #[error("Cannot update this type of record, skipped")]
+    #[error("Cannot update this type of record, skipped")] // TODO get rid of this, filter them out
     IncompatibleType(dns::DnsRecord),
 }
 
