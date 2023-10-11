@@ -4,6 +4,7 @@ use cloudflare::framework::{auth::Credentials, HttpApiClient, HttpApiClientConfi
 use reqwest::blocking;
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use tabled::Tabled;
 use thiserror::Error;
 
 #[derive(Deserialize)]
@@ -109,7 +110,7 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
     Ok(results)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Tabled)]
 pub enum RecordUpdateResult {
     Ok(dns::DnsRecord),
     Err(RecordUpdateError),

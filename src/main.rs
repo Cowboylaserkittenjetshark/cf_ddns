@@ -1,6 +1,7 @@
 use clap::Parser;
 use ddns_client::{run, Config};
 use std::{fs, process};
+use tabled::Table;
 
 fn main() {
     let args = Args::parse();
@@ -18,9 +19,13 @@ fn main() {
             process::exit(1);
         }
     };
-
-    let result = run(cfg);
-    println!("Result: {}", result.unwrap_err());
+    match run(cfg) {
+        Ok(results) => {
+            let table = Table::new(results).to_string();
+            println!("{table}");
+        }
+        Err(e) => eprintln!("Error: {e}"),
+    }
 }
 
 #[derive(Parser, Debug)]
