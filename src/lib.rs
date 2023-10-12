@@ -1,9 +1,9 @@
+mod fetchers;
+
 use cloudflare::endpoints::{dns, zone};
 use cloudflare::framework::Environment;
 use cloudflare::framework::{auth::Credentials, HttpApiClient, HttpApiClientConfig};
-use reqwest::blocking;
-use serde::{Deserialize, Serialize};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use serde::Deserialize;
 use tabled::Tabled;
 use thiserror::Error;
 
@@ -12,7 +12,7 @@ pub struct Config {
     token: String,
     domains: Vec<String>,
     tag: String,
-    fetcher: Box<dyn Fetch>,
+    fetcher: Box<dyn fetchers::Fetch>,
     ipv4: bool,
     ipv6: bool,
 }
@@ -142,49 +142,6 @@ pub enum Error {
     #[error("Error fetching new ip addr: {source}")]
     FetchFailure {
         #[from]
-        source: FetcherError,
+        source: fetchers::Error,
     },
-}
-
-#[derive(Error, Debug)]
-pub enum FetcherError {
-    #[error("Reqwest returned an error connecting to a fetcher API: {source}")]
-    ReqwestError {
-        #[from]
-        source: reqwest::Error,
-    },
-    #[error("API returned HTTP error {code}")]
-    HttpError { code: u16 },
-}
-
-#[typetag::serde(tag = "fetcher")]
-trait Fetch {
-    fn fetch(&self) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>), FetcherError>;
-}
-
-#[derive(Serialize, Deserialize)]
-struct Ipify;
-
-#[derive(Deserialize)]
-struct IpifyResponse {
-    ip: IpAddr,
-}
-
-#[typetag::serde]
-impl Fetch for Ipify {
-    fn fetch(&self) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>), FetcherError> {
-        let url = "https://api64.ipify.org?format=json";
-        let response = blocking::get(url)?;
-        if response.status().is_success() {
-            let result: IpifyResponse = response.json()?;
-            match result.ip {
-                IpAddr::V4(addr) => Ok((Some(addr), None)),
-                IpAddr::V6(addr) => Ok((None, Some(addr))),
-            }
-        } else {
-            return Err(FetcherError::HttpError {
-                code: response.status().as_u16(),
-            });
-        }
-    }
 }
