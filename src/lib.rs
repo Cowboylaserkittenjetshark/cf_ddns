@@ -43,10 +43,9 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
         };
 
         let response = api_client.request(&endpoint)?;
-        let filtered_recs = response
-            .result
-            .into_iter()
-            .filter(|r| r.comment.contains(&cfg.tag) || r.tags.contains(&cfg.tag));
+        let filtered_recs = response.result.into_iter().filter(|r| {
+            r.comment.as_ref().is_some_and(|x| x.contains(&cfg.tag)) || r.tags.contains(&cfg.tag)
+        });
         // TODO Handle message and error arrays from valid ListDnsRecords response
         for rec in filtered_recs {
             match rec.content {
