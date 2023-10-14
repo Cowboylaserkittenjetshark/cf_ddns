@@ -4,7 +4,6 @@ use cloudflare::endpoints::{dns, zone};
 use cloudflare::framework::Environment;
 use cloudflare::framework::{auth::Credentials, HttpApiClient, HttpApiClientConfig};
 use serde::Deserialize;
-use tabled::Tabled;
 use thiserror::Error;
 
 #[derive(Deserialize)]
@@ -14,13 +13,16 @@ pub struct Config {
     fetcher: Box<dyn fetchers::Fetch>,
 }
 
-pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
+pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>> {
     let (v4_addr, v6_addr) = cfg.fetcher.fetch()?;
 
     let api_credentials = Credentials::UserAuthToken { token: cfg.token };
     let api_client_config = HttpApiClientConfig::default();
     let environment = Environment::Production;
-    let api_client = HttpApiClient::new(api_credentials, api_client_config, environment).unwrap(); // TODO Handle error
+    let api_client = match HttpApiClient::new(api_credentials, api_client_config, environment) {
+        Ok(client) => client,
+        Err(err) => return Err(Error::BuildApiClient(err)),
+    };
 
     let endpoint = zone::ListZones {
         params: zone::ListZonesParams::default(),
@@ -42,12 +44,11 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
         // TODO Handle message and error arrays from valid ListDnsRecords response
         for rec in filtered_recs {
             match rec.content {
+                // TODO Deduplicate for these match arms. Only the new_content needs to be created in the match
                 dns::DnsContent::A { content } => {
                     if let Some(addr) = v4_addr {
                         if content == addr {
-                            let error =
-                                RecordUpdateResult::Skipped(RecordUpdateError::UpToDate(rec));
-                            results.push(error);
+                            results.push(Err(RecordUpdateError::UpToDate(rec)));
                         } else {
                             let new_content = dns::DnsContent::A { content: addr };
                             let endpoint = dns::UpdateDnsRecord {
@@ -61,19 +62,16 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
                                 },
                             };
                             let response = api_client.request(&endpoint)?;
-                            results.push(RecordUpdateResult::Updated(response.result));
+                            results.push(Ok(response.result));
                         }
                     } else {
-                        let error = RecordUpdateResult::Skipped(RecordUpdateError::NoNewAddr(rec));
-                        results.push(error)
+                        results.push(Err(RecordUpdateError::NoNewAddr(rec)));
                     }
                 }
                 dns::DnsContent::AAAA { content } => {
                     if let Some(addr) = v6_addr {
                         if content == addr {
-                            let error =
-                                RecordUpdateResult::Skipped(RecordUpdateError::UpToDate(rec));
-                            results.push(error);
+                            results.push(Err(RecordUpdateError::UpToDate(rec)));
                         } else {
                             let new_content = dns::DnsContent::AAAA { content: addr };
                             let endpoint = dns::UpdateDnsRecord {
@@ -86,18 +84,16 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
                                     content: new_content,
                                 },
                             };
-                            let response = api_client.request(&endpoint)?;
-                            results.push(RecordUpdateResult::Updated(response.result));
+                            let response = api_client.request(&endpoint)?; // TODO Should it really bail when record fails to update? Could just return a RecordUpdateError
+                            results.push(Ok(response.result));
                         }
                     } else {
-                        let error = RecordUpdateResult::Skipped(RecordUpdateError::NoNewAddr(rec));
-                        results.push(error)
+                        results.push(Err(RecordUpdateError::NoNewAddr(rec)));
                     }
                 }
                 _ => {
-                    let error =
-                        RecordUpdateResult::Skipped(RecordUpdateError::IncompatibleType(rec));
-                    results.push(error);
+                    results.push(Err(RecordUpdateError::IncompatibleType(rec)));
+                    // TODO Should be filtered out instead of error-ing
                 }
             }
         }
@@ -105,11 +101,10 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
     Ok(results)
 }
 
-#[derive(Debug, Tabled)]
-pub enum RecordUpdateResult {
-    Updated(dns::DnsRecord),
-    Skipped(RecordUpdateError),
-}
+pub type Result<T> = std::result::Result<T, Error>;
+
+pub type RecordUpdateResult =
+    std::result::Result<cloudflare::endpoints::dns::DnsRecord, RecordUpdateError>;
 
 #[derive(Error, Debug)]
 pub enum RecordUpdateError {
@@ -125,16 +120,10 @@ pub enum RecordUpdateError {
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Generic error")]
-    Generic,
-    #[error("Error with cloudflare api: {source}")]
-    Cloudflare {
-        #[from]
-        source: cloudflare::framework::response::ApiFailure,
-    },
-    #[error("Error fetching new ip addr: {source}")]
-    FetchFailure {
-        #[from]
-        source: fetchers::Error,
-    },
+    #[error("Error with cloudflare api: {0}")]
+    Cloudflare(#[from] cloudflare::framework::response::ApiFailure),
+    #[error("Error fetching new ip addr: {0}")]
+    FetchFailure(#[from] fetchers::Error),
+    #[error("Error building api client: {0}")]
+    BuildApiClient(cloudflare::framework::Error),
 }
