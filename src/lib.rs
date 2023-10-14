@@ -24,24 +24,21 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>> {
         Err(err) => return Err(Error::BuildApiClient(err)),
     };
 
+    let mut results: Vec<RecordUpdateResult> = Vec::new();
+
     let endpoint = zone::ListZones {
         params: zone::ListZonesParams::default(),
     };
-
     let response = api_client.request(&endpoint)?;
-    // TODO Handle message and error arrays from valid ListZones response. Display them?
-    let mut results: Vec<RecordUpdateResult> = Vec::new();
     for zone in response.result {
         let endpoint = dns::ListDnsRecords {
             zone_identifier: &zone.id,
             params: dns::ListDnsRecordsParams::default(),
         };
-
         let response = api_client.request(&endpoint)?;
         let filtered_recs = response.result.into_iter().filter(|r| {
             r.comment.as_ref().is_some_and(|x| x.contains(&cfg.tag)) || r.tags.contains(&cfg.tag)
         });
-        // TODO Handle message and error arrays from valid ListDnsRecords response
         for rec in filtered_recs {
             let new_content = match rec.content {
                 dns::DnsContent::A { content } => match v4_addr {
