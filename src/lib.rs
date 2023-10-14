@@ -10,11 +10,8 @@ use thiserror::Error;
 #[derive(Deserialize)]
 pub struct Config {
     token: String,
-    domains: Vec<String>,
     tag: String,
     fetcher: Box<dyn fetchers::Fetch>,
-    ipv4: bool,
-    ipv6: bool,
 }
 
 pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
@@ -32,11 +29,7 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>, Error> {
     let response = api_client.request(&endpoint)?;
     // TODO Handle message and error arrays from valid ListZones response. Display them?
     let mut results: Vec<RecordUpdateResult> = Vec::new();
-    let filtered_zones = response
-        .result
-        .iter()
-        .filter(|z| cfg.domains.contains(&z.name));
-    for zone in filtered_zones {
+    for zone in response.result {
         let endpoint = dns::ListDnsRecords {
             zone_identifier: &zone.id,
             params: dns::ListDnsRecordsParams::default(),
