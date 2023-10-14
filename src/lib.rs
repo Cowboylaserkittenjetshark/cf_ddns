@@ -80,6 +80,8 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>> {
                     proxied: None,
                     name: &rec.name,
                     content: new_content,
+                    comment: rec.comment.as_deref(),
+                    tags: &rec.tags,
                 },
             };
             match api_client.request(&endpoint) {
