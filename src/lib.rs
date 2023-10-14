@@ -43,58 +43,48 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>> {
         });
         // TODO Handle message and error arrays from valid ListDnsRecords response
         for rec in filtered_recs {
-            match rec.content {
-                // TODO Deduplicate for these match arms. Only the new_content needs to be created in the match
-                dns::DnsContent::A { content } => {
-                    if let Some(addr) = v4_addr {
-                        if content == addr {
+            let new_content = match rec.content {
+                dns::DnsContent::A { content } => match v4_addr {
+                    Some(new_addr) => {
+                        if content == new_addr {
                             results.push(Err(RecordUpdateError::UpToDate(rec)));
-                        } else {
-                            let new_content = dns::DnsContent::A { content: addr };
-                            let endpoint = dns::UpdateDnsRecord {
-                                zone_identifier: &rec.zone_id,
-                                identifier: &rec.id,
-                                params: dns::UpdateDnsRecordParams {
-                                    ttl: None,
-                                    proxied: None,
-                                    name: &rec.name,
-                                    content: new_content,
-                                },
-                            };
-                            let response = api_client.request(&endpoint)?;
-                            results.push(Ok(response.result));
+                            continue;
                         }
-                    } else {
-                        results.push(Err(RecordUpdateError::NoNewAddr(rec)));
+                        dns::DnsContent::A { content: new_addr }
                     }
-                }
-                dns::DnsContent::AAAA { content } => {
-                    if let Some(addr) = v6_addr {
-                        if content == addr {
+                    None => {
+                        results.push(Err(RecordUpdateError::NoNewAddr(rec)));
+                        continue;
+                    }
+                },
+                dns::DnsContent::AAAA { content } => match v6_addr {
+                    Some(new_addr) => {
+                        if content == new_addr {
                             results.push(Err(RecordUpdateError::UpToDate(rec)));
-                        } else {
-                            let new_content = dns::DnsContent::AAAA { content: addr };
-                            let endpoint = dns::UpdateDnsRecord {
-                                zone_identifier: &rec.zone_id,
-                                identifier: &rec.id,
-                                params: dns::UpdateDnsRecordParams {
-                                    ttl: None,
-                                    proxied: None,
-                                    name: &rec.name,
-                                    content: new_content,
-                                },
-                            };
-                            let response = api_client.request(&endpoint)?; // TODO Should it really bail when record fails to update? Could just return a RecordUpdateError
-                            results.push(Ok(response.result));
+                            continue;
                         }
-                    } else {
-                        results.push(Err(RecordUpdateError::NoNewAddr(rec)));
+                        dns::DnsContent::AAAA { content: new_addr }
                     }
-                }
-                _ => {
-                    results.push(Err(RecordUpdateError::IncompatibleType(rec)));
-                    // TODO Should be filtered out instead of error-ing
-                }
+                    None => {
+                        results.push(Err(RecordUpdateError::NoNewAddr(rec)));
+                        continue;
+                    }
+                },
+                _ => continue,
+            };
+            let endpoint = dns::UpdateDnsRecord {
+                zone_identifier: &rec.zone_id,
+                identifier: &rec.id,
+                params: dns::UpdateDnsRecordParams {
+                    ttl: None,
+                    proxied: None,
+                    name: &rec.name,
+                    content: new_content,
+                },
+            };
+            match api_client.request(&endpoint) {
+                Ok(succ) => results.push(Ok(succ.result)),
+                Err(fail) => results.push(Err(RecordUpdateError::Cloudflare(fail, rec))),
             }
         }
     }
@@ -114,13 +104,13 @@ pub enum RecordUpdateError {
     Locked(dns::DnsRecord),
     #[error("Did not fetch an ip address appropriate for record type, skipped")]
     NoNewAddr(dns::DnsRecord),
-    #[error("Cannot update this type of record, skipped")] // TODO get rid of this, filter them out
-    IncompatibleType(dns::DnsRecord),
+    #[error("Error during transaction with the cloudflare api: {0}")]
+    Cloudflare(cloudflare::framework::response::ApiFailure, dns::DnsRecord),
 }
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Error with cloudflare api: {0}")]
+    #[error("Error during transaction with the cloudflare api: {0}")]
     Cloudflare(#[from] cloudflare::framework::response::ApiFailure),
     #[error("Error fetching new ip addr: {0}")]
     FetchFailure(#[from] fetchers::Error),
