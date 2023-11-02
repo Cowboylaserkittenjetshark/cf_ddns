@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.4.4", features = ["derive"] }
 cloudflare = { git = 'https://github.com/cowboylaserkittenjetshark/cloudflare-rs.git', features = ["blocking"] }
+default-net = "0.18.0"
 directories = "5.0.1"
 reqwest = { version = "0.11.22", features = ["blocking"] }
 serde = { version = "1.0.188", features = ["derive"] }

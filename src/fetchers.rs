@@ -13,6 +13,8 @@ pub enum Error {
     },
     #[error("API returned HTTP error {code}")]
     HttpError { code: u16 },
+    #[error("Fetcher encountered an error: {0}")]
+    Generic(String),
 }
 
 #[typetag::serde(tag = "fetcher")]

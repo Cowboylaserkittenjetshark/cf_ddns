@@ -5,7 +5,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 #[derive(Serialize, Deserialize)]
 struct Nest {
-    router_ip: IpAddr,
+    router_ip: Option<IpAddr>,
 }
 
 #[derive(Deserialize)]
@@ -23,7 +23,14 @@ struct Wan {
 #[typetag::serde]
 impl Fetch for Nest {
     fn fetch(&self) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>), Error> {
-        let url = format!("http://{}/api/v1/status", self.router_ip);
+        let ip = match self.router_ip {
+            Some(ip) => ip,
+            None => match default_net::get_default_gateway() {
+                Ok(gateway) => gateway.ip_addr,
+                Err(e) => return Err(Error::Generic(e)),
+            },
+        };
+        let url = format!("http://{}/api/v1/status", ip);
         let response = blocking::get(url)?;
         if response.status().is_success() {
             let result: RouterResponse = response.json()?;
