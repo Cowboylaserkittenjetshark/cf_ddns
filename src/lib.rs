@@ -69,16 +69,16 @@ pub fn run(cfg: Config) -> Result<Vec<RecordUpdateResult>> {
                 },
                 _ => continue,
             };
-            let endpoint = dns::UpdateDnsRecord {
+            let endpoint = dns::PatchDnsRecord {
                 zone_identifier: &rec.zone_id,
                 identifier: &rec.id,
-                params: dns::UpdateDnsRecordParams {
+                params: dns::PatchDnsRecordParams {
                     ttl: None,
                     proxied: None,
                     name: &rec.name,
                     content: new_content,
-                    comment: rec.comment.as_deref(),
-                    tags: &rec.tags,
+                    comment: None,
+                    tags: None,
                 },
             };
             match api_client.request(&endpoint) {
